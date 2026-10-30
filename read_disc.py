@@ -3,10 +3,12 @@ import sys
 
 import discid
 
+DISC_STATION = "/dev/sr0"
+
 
 def main():
     try:
-        disc = discid.read("/dev/sr0")
+        disc = discid.read("%s" % DISC_STATION)
     except discid.DiscError as error:
         print(f"Kan de cd niet uitlezen: {error}", file=sys.stderr)
         return 1

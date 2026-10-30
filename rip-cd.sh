@@ -15,6 +15,6 @@ matching_discs=$(find "$OUTPUTDIR" -type f -name 'disc-info.json' \
 if [[ -n "$matching_discs" ]]; then
     printf '%s\n' "$matching_discs"
 else
-    printf '%s\n' 'Geen rip van deze cd in de library gevonden. Het rippen wordt gestart.'
+    printf '%s\n' 'Geen bestaande rip van deze cd in de library gevonden. Het rippen wordt gestart.'
     TOC_OUTPUT="$toc_output" abcde -c ./abcde.conf
 fi
