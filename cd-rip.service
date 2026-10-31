@@ -1,0 +1,12 @@
+[Unit]
+Description=Rip an audio CD from /dev/sr0
+
+[Service]
+Type=oneshot
+User=thomas
+Environment=HOME=/home/thomas
+WorkingDirectory=/home/thomas/cd-rip
+ExecStart=/bin/bash /home/thomas/cd-rip/rip-cd.sh
+TimeoutStartSec=infinity
+StandardOutput=journal
+StandardError=journal

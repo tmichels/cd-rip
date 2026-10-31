@@ -2,8 +2,9 @@
 
 Ript audio-cd's naar losse mp3-bestanden en bewaart de cd-layout naast de
 muziek. Een cd wordt overgeslagen als dezelfde layout al in de muziekbibliotheek
-is geregistreerd:
-1. Het script leest de cd-layout en gebruikt deze als een soort vingerafdruk.
+is geregistreerd
+1. Plaats een cd en het script wordt automatisch opgestart (zie kopje hieronder).
+2. Het script leest de cd-layout en gebruikt deze als een soort vingerafdruk.
 2. Het vergelijkt de vingerafdruk van de cd met alle vingerafdrukken opgeslagen in de bibliotheek.
 2. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
 3. Anders ript `abcde` de cd naar mp3's met metadata, volgens `abcde.conf`.
@@ -22,6 +23,7 @@ Het project gebruikt:
 - `jq`
 - `LAME`
 - `abcde`
+- "De map $HOME/muziek"
 
 Op Debian/Ubuntu kun je de benodigdheden als volgt installeren:
 
@@ -29,20 +31,29 @@ Op Debian/Ubuntu kun je de benodigdheden als volgt installeren:
 sudo apt install python3-venv libdiscid0 abcde lame jq
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
+mkdir -p "$HOME/muziek"
 ```
 
-Het cd-station is `/dev/sr0`. Indien dit afwijkt: 
-- pas read_disc.py aan
-- pas abcde.conf aan (`CDROM=/dev/sr0`)
+## Automatisch starten bij het plaatsen van een cd
 
-## Gebruik
+`99-cd-rip.rules` laat udev de systemd-service `cd-rip.service` starten zodra
+een audio-cd in `/dev/sr0` wordt herkend. Data-cd's en lege stations starten
+geen rip. Het rippen draait zonder terminal of interactieve vragen.
 
-Voer het script uit vanuit de projectmap: de paden naar de configuratie,
-Python-omgeving en het Python-script zijn relatief.
+Installeer en laad de bestanden met:
 
 ```bash
-mkdir -p "$HOME/muziek"
-bash rip-cd.sh
+sudo install -m 0644 cd-rip.service /etc/systemd/system/cd-rip.service
+sudo install -m 0644 99-cd-rip.rules /etc/udev/rules.d/99-cd-rip.rules
+sudo systemctl daemon-reload
+sudo udevadm control --reload-rules
+```
+
+Bekijk de status en uitvoer met:
+
+```bash
+systemctl status cd-rip.service
+journalctl -u cd-rip.service
 ```
 
 ## Logbestanden
