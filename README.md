@@ -2,7 +2,13 @@
 
 Ript audio-cd's naar losse mp3-bestanden en bewaart de cd-layout naast de
 muziek. Een cd wordt overgeslagen als dezelfde layout al in de muziekbibliotheek
-is geregistreerd.
+is geregistreerd:
+1. Het script leest de cd-layout en gebruikt deze als een soort vingerafdruk.
+2. Het vergelijkt de vingerafdruk van de cd met alle vingerafdrukken opgeslagen in de bibliotheek.
+2. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
+3. Anders ript `abcde` de cd naar mp3's met metadata, volgens `abcde.conf`.
+4. Na controle op fouten en voltooide tracks wordt de vingerafdruk als
+   `disc-info.json` naast de mp3's opgeslagen voor herkenning bij een volgende keer.
 
 ## Installatie
 
@@ -39,13 +45,11 @@ mkdir -p "$HOME/muziek"
 bash rip-cd.sh
 ```
 
-## Werking
+## Logbestanden
 
-1. Het script leest de cd-layout als vingerafdruk en zoekt of die al voorkomt in de bibliotheek.
-2. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
-3. Anders ript `abcde` de cd naar mp3's met metadata, volgens `abcde.conf`.
-4. Na controle op fouten en voltooide tracks wordt de vingerafdruk als
-   `disc-info.json` naast de mp3's opgeslagen voor herkenning bij een volgende keer.
+Het script toont alle uitvoer en foutmeldingen op de terminal en schrijft ze
+ook automatisch naar `log/YYYYMMDD_HH:MM:SS.log` in de projectmap. Oude logs worden automatisch opgeruimd, 
+er is een instelbaar max aantal logbestanden.
 
 ## Configuratie en bestandsindeling
 

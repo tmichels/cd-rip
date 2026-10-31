@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Alle uitvoer en foutmeldingen verschijnen nu op de terminal én in het logbestand. Oude logfiles worden verwijderd
+MAX_LOG_FILES=20
+mkdir -p log
+find log -maxdepth 1 -type f -name '*.log' -print0 |
+    LC_ALL=C sort -zr | tail -z -n +"$MAX_LOG_FILES" | xargs -0 -r rm --
+exec > >(tee -a "log/$(date '+%Y%m%d_%H:%M:%S').log") 2>&1
+
 date '+%d-%m-%Y %H:%M:%S'
 source ./abcde.conf
 
@@ -22,3 +30,4 @@ else
     printf '%s\n' 'Geen bestaande rip van deze cd in de library gevonden. Het rippen wordt gestart.'
     TOC_OUTPUT="$toc_output" abcde -c ./abcde.conf
 fi
+date '+%d-%m-%Y %H:%M:%S'
