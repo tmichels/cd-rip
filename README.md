@@ -24,12 +24,15 @@ Het project gebruikt:
 - `LAME`
 - `abcde`
 - `id3v2`
+- `glyrc` (pakket `glyrc`, voor het downloaden van albumhoezen)
+- `eyeD3` (pakket `eyed3`, voor het insluiten van albumhoezen in mp3's)
+- ImageMagick (voor herkenning en conversie van afbeeldingen)
 - "De map $HOME/muziek"
 
 Op Debian/Ubuntu kun je de benodigdheden als volgt installeren:
 
 ```bash
-sudo apt install python3-venv libdiscid0 abcde lame id3v2 jq
+sudo apt install python3-venv libdiscid0 abcde lame id3v2 jq glyrc eyed3 imagemagick
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 mkdir -p "$HOME/muziek"
@@ -77,6 +80,18 @@ aangevuld. Deze tags staan in de mp3 zelf, niet in `disc-info.json`.
 Dit geldt voor nieuwe rips; bestaande rips worden nog steeds overgeslagen en
 krijgen hiermee niet achteraf nieuwe tags.
 
+De actie `playlist` maakt een `.m3u` in de albummap, ook bij verzamelalbums.
+De playlist bevat de tracks in cd-volgorde met relatieve paden, zodat je de
+hele albummap kunt verplaatsen.
+
+`getalbumart` probeert automatisch een albumhoes te downloaden.
+`embedalbumart` sluit deze met `eyeD3` in iedere mp3 in. In abcde 2.9.3 wordt
+de losse afbeelding daarna bewaard in `albumart_backup/cover.jpg` in de
+albummap. Als er geen hoes wordt gevonden, kan de rip zonder hoes doorgaan;
+de uitvoer van `abcde` staat in het logbestand. Omdat het rippen niet-interactief
+is, wordt niet gevraagd om een hoes te kiezen of te bevestigen.
+Ook playlists en albumhoezen worden alleen bij nieuwe rips toegevoegd.
+
 Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
 
 ```text
@@ -85,6 +100,9 @@ Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
     └── Album/
         ├── 01. Artist - First Song.mp3
         ├── 02. Artist - Second Song.mp3
+        ├── Album.m3u
+        ├── albumart_backup/
+        │   └── cover.jpg
         └── disc-info.json
 ```
 
@@ -96,6 +114,9 @@ Bij een verzamelalbum kiest `abcde` zijn standaardimplementatie `VAOUTPUTFORMAT`
 └── Various-Summer Hits/
     ├── 01.Artist One-First Song.mp3
     ├── 02.Artist Two-Second Song.mp3
+    ├── Summer Hits.m3u
+    ├── albumart_backup/
+    │   └── cover.jpg
     └── disc-info.json
 ```
 
