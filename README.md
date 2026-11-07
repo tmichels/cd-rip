@@ -23,12 +23,13 @@ Het project gebruikt:
 - `jq`
 - `LAME`
 - `abcde`
+- `id3v2`
 - "De map $HOME/muziek"
 
 Op Debian/Ubuntu kun je de benodigdheden als volgt installeren:
 
 ```bash
-sudo apt install python3-venv libdiscid0 abcde lame jq
+sudo apt install python3-venv libdiscid0 abcde lame id3v2 jq
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 mkdir -p "$HOME/muziek"
@@ -65,6 +66,17 @@ er is een instelbaar max aantal logbestanden.
 ## Configuratie en bestandsindeling
 
 De projectspecifieke instellingen staan met inline toelichting in `abcde.conf`.
+De actie `tag` schrijft de metadata die `abcde` heeft opgehaald met `id3v2`
+als ID3v2.3-tags in iedere mp3: artiest, tracktitel, albumtitel, jaar, genre,
+tracknummer en commentaar (indien beschikbaar). Het tracknummer bevat ook het
+totale aantal tracks. Bij verzamelalbums krijgt iedere track zijn eigen artiest
+en wordt de albumartiest `Various`.
+
+Ontbrekende gegevens in de metadatabron, zoals het jaar, worden niet automatisch
+aangevuld. Deze tags staan in de mp3 zelf, niet in `disc-info.json`.
+Dit geldt voor nieuwe rips; bestaande rips worden nog steeds overgeslagen en
+krijgen hiermee niet achteraf nieuwe tags.
+
 Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
 
 ```text
