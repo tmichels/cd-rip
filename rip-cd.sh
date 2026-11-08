@@ -44,9 +44,20 @@ else
 
     if [[ -s "$metadata_dir/musicbrainz.json" ]]; then
         .venv/bin/python musicbrainz_to_cddb.py \
-            "$metadata_dir/musicbrainz.json" "$metadata_dir/disc-info.json" "$metadata_dir/cddb" ||
+            "$metadata_dir/musicbrainz.json" "$metadata_dir/disc-info.json" "$metadata_dir/cddb" "$metadata_dir/release-id" ||
             abort_and_eject 'Metadata omzetten mislukt; de rip wordt afgebroken.'
         export RIP_CDDB_DIR="$PWD/$metadata_dir/cddb"
+
+        # De hoes is optioneel: een ontbrekende hoes breekt de rip niet af
+        rm -f "$metadata_dir/cover.jpg"
+        if ! curl -sSfL -A 'cd-rip/1.0 (https://github.com/tmichels/cd-rip)' \
+            -o "$metadata_dir/cover.jpg" \
+            "https://coverartarchive.org/release/$(<"$metadata_dir/release-id")/front"; then
+            rm -f "$metadata_dir/cover.jpg"
+            printf '%s\n' 'Geen albumhoes gevonden bij de Cover Art Archive.'
+        else
+            export RIP_COVER_FILE="$PWD/$metadata_dir/cover.jpg"
+        fi
         printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$metadata_dir"
     else
         # Onbekende disc (404): abcde mag niet nogmaals bij MusicBrainz zoeken

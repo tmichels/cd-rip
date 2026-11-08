@@ -57,19 +57,19 @@ def build_cddb(metadata, disc_info):
             title = f"{clean(credit_name(track['artist-credit']))} / {title}"
         lines.append(f"TTITLE{index}={title}")
     lines += ["EXTD=", *[f"EXTT{index}=" for index in range(len(tracks))], "PLAYORDER="]
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n", release["id"]
 
 
 def main():
-    if len(sys.argv) != 4:
-        print("Gebruik: musicbrainz_to_cddb.py <metadata.json> <disc-info.json> <uitvoermap>", file=sys.stderr)
+    if len(sys.argv) != 5:
+        print("Gebruik: musicbrainz_to_cddb.py <metadata.json> <disc-info.json> <uitvoermap> <release-id-bestand>", file=sys.stderr)
         return 1
 
-    metadata_file, disc_info_file, output_dir = sys.argv[1:]
+    metadata_file, disc_info_file, output_dir, release_id_file = sys.argv[1:]
     try:
         metadata = json.loads(Path(metadata_file).read_text(encoding="utf-8"))
         disc_info = json.loads(Path(disc_info_file).read_text(encoding="utf-8"))
-        cddb = build_cddb(metadata, disc_info)
+        cddb, release_id = build_cddb(metadata, disc_info)
     except (OSError, ValueError, KeyError) as error:
         print(f"Omzetten naar CDDB mislukt: {error}", file=sys.stderr)
         return 1
@@ -77,6 +77,7 @@ def main():
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     (output / disc_info["cddb_id"]).write_text(cddb, encoding="utf-8")
+    Path(release_id_file).write_text(release_id + "\n", encoding="utf-8")
     return 0
 
 

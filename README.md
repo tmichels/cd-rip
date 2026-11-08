@@ -85,7 +85,9 @@ De actie `playlist` maakt een `.m3u` in de albummap, ook bij verzamelalbums.
 De playlist bevat de tracks in cd-volgorde met relatieve paden, zodat je de
 hele albummap kunt verplaatsen.
 
-`getalbumart` probeert automatisch een albumhoes te downloaden.
+`rip-cd.sh` downloadt vooraf de albumhoes van de Cover Art Archive (van de
+gekozen MusicBrainz-release) naar `metadata/<disc_id>/cover.jpg`; `getalbumart`
+gebruikt die via `cover_from_file.sh`.
 `embedalbumart` sluit deze met `eyeD3` in iedere mp3 in. In abcde 2.9.3 wordt
 de losse afbeelding daarna bewaard in `albumart_backup/cover.jpg` in de
 albummap. Als er geen hoes wordt gevonden, kan de rip zonder hoes doorgaan;
@@ -159,6 +161,9 @@ JSON; `abcde` leest het via `CDDBLOCALDIR`, zodat de rip precies deze metadata
 gebruikt. Als MusicBrainz meerdere releases voor de disc kent, wordt de eerste
 gebruikt. Het genre wordt niet ingevuld. Ontbreekt de disc_id in het antwoord of
 klopt het aantal tracks niet met de cd, dan wordt afgebroken.
+
+Ook `release-id` (de gekozen release) en `cover.jpg` staan in die map. Heeft de
+release geen hoes, dan gaat de rip zonder hoes door.
 
 ## Aandachtspunten
 
