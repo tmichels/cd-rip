@@ -27,7 +27,32 @@ if [[ -n "$matching_discs" ]]; then
     printf '\nDe metadata volgens abcde:\n'
     METADATA_ONLY=y abcde -c ./abcde.conf -a cddb,clean
 else
-    printf '%s\n' 'Geen bestaande rip van deze cd in de library gevonden. Het rippen wordt gestart.'
+    printf '%s\n' 'Geen bestaande rip van deze cd in de library gevonden. De metadata wordt opgehaald.'
+
+    # Metadata wordt eerst opgehaald en bewaard; zonder goede metadata wordt niet geript en de cd uitgeworpen
+    abort_and_eject() {
+        printf '%s\n' "$1" >&2
+        eject "$CDROM" || true
+        exit 1
+    }
+    metadata_dir="metadata/$disc_id"
+    mkdir -p "$metadata_dir"
+    rm -rf "$metadata_dir/cddb"
+    printf '%s\n' "$toc_output" > "$metadata_dir/disc-info.json"
+    .venv/bin/python fetch_metadata.py "$disc_id" > "$metadata_dir/musicbrainz.json" ||
+        abort_and_eject 'Metadata ophalen mislukt; de rip wordt afgebroken.'
+
+    if [[ -s "$metadata_dir/musicbrainz.json" ]]; then
+        .venv/bin/python musicbrainz_to_cddb.py \
+            "$metadata_dir/musicbrainz.json" "$metadata_dir/disc-info.json" "$metadata_dir/cddb" ||
+            abort_and_eject 'Metadata omzetten mislukt; de rip wordt afgebroken.'
+        export RIP_CDDB_DIR="$PWD/$metadata_dir/cddb"
+        printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$metadata_dir"
+    else
+        # Onbekende disc (404): abcde mag niet nogmaals bij MusicBrainz zoeken
+        export RIP_CDDB_METHOD=cdtext
+        printf '%s\n' 'Geen metadata beschikbaar. Het rippen wordt gestart zonder metadata.'
+    fi
     TOC_OUTPUT="$toc_output" abcde -c ./abcde.conf
 fi
 date '+%d-%m-%Y %H:%M:%S'

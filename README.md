@@ -7,7 +7,8 @@ is geregistreerd
 2. Het script leest de cd-layout en gebruikt deze als een soort vingerafdruk.
 2. Het vergelijkt de vingerafdruk van de cd met alle vingerafdrukken opgeslagen in de bibliotheek.
 2. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
-3. Anders ript `abcde` de cd naar mp3's met metadata, volgens `abcde.conf`.
+3. Anders haalt `fetch_metadata.py` de metadata op bij MusicBrainz (zie "Metadata"
+   hieronder) en ript `abcde` de cd naar mp3's met die metadata, volgens `abcde.conf`.
 4. Na controle op fouten en voltooide tracks wordt de vingerafdruk als
    `disc-info.json` naast de mp3's opgeslagen voor herkenning bij een volgende keer.
 
@@ -136,6 +137,28 @@ De JSON bevat de gegevens uit `read_disc.py`:
 De JSON bevat geen artiest- of albumtitels en geen controlegetallen van de
 mp3-bestanden. De herkenning is gebaseerd op de cd-layout, niet op vergelijking
 van de audio.
+
+## Metadata
+
+Voor een nieuwe cd haalt `fetch_metadata.py` eerst de metadata op bij de
+MusicBrainz-API, los van `abcde`. De uitkomst bepaalt of er geript wordt:
+
+| Antwoord van MusicBrainz | Gevolg                                                             |
+|--------------------------|--------------------------------------------------------------------|
+| 200                      | Metadata wordt opgeslagen en gebruikt voor de rip                  |
+| 404 (disc onbekend)      | De rip gaat door zonder metadata; `abcde` zoekt niet opnieuw       |
+| 503 (server bezet)       | Elke 5 seconden opnieuw, 1 minuut lang; daarna wordt afgebroken    |
+| 400 en alle andere fouten| De rip wordt afgebroken                                            |
+
+Bij een afgebroken rip wordt de cd uitgeworpen.
+
+De metadata staat in `metadata/<disc_id>/` in de projectmap:
+`musicbrainz.json` (het antwoord), `disc-info.json` (de cd-layout) en
+`cddb/<cddb_id>`. Dat laatste bestand maakt `musicbrainz_to_cddb.py` van de
+JSON; `abcde` leest het via `CDDBLOCALDIR`, zodat de rip precies deze metadata
+gebruikt. Als MusicBrainz meerdere releases voor de disc kent, wordt de eerste
+gebruikt. Het genre wordt niet ingevuld. Ontbreekt de disc_id in het antwoord of
+klopt het aantal tracks niet met de cd, dan wordt afgebroken.
 
 ## Aandachtspunten
 
