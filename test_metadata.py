@@ -52,8 +52,9 @@ class MetadataTests(unittest.TestCase):
         )
 
     def test_automatic_lookup_unchanged(self):
-        cddb, release_id = self.build()
+        cddb, release_id, disc_number = self.build()
         self.assertEqual(release_id, RELEASE_ID)
+        self.assertEqual(disc_number, 1)
         self.assertIn("DTITLE=Artist / Album\n", cddb)
         self.assertIn("TTITLE1=Second\n", cddb)
         self.assertIn("DISCID=12345678\n", cddb)
@@ -79,6 +80,7 @@ class MetadataTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.build(manual=True)
         self.assertIn("TTITLE0=Disc two\n", self.build(manual=True, medium=2)[0])
+        self.assertEqual(self.build(manual=True, medium=2)[2], 2)
         with self.assertRaises(ValueError):
             self.build(manual=True, medium=3)
         first["discs"] = [{"id": "test-disc"}]
@@ -238,7 +240,9 @@ test -s "$RIP_CDDB_DIR/12345678"
 jq -e --arg id e925ed61-5bbf-41d8-a352-e31f2ef53f8e '.id == $id' "$RIP_RELEASE_FILE" >/dev/null
 test -n "$TOC_OUTPUT"
 touch ripped
-album_dir="$HOME/muziek/Artist/Album"
+ARTISTFILE=Artist
+ALBUMFILE=Album
+album_dir="$HOME/muziek/$(eval echo \\""$(dirname "$OUTPUTFORMAT")"\\")"
 mkdir -p "$album_dir" "$HOME/abcde-temp"
 touch "$album_dir/01. Artist - First.mp3" "$album_dir/02. Artist - Second.mp3"
 DALBUM=Album
@@ -279,12 +283,21 @@ fi
             self.assertEqual((root / "ripped").exists(), ripped, result.stdout)
             self.assertEqual((root / "ejected").exists(), ripped, result.stdout)
             if ripped:
+                multi_disc = scenario == "selected"
+                album_dir = root / "muziek/Artist/Album"
+                if multi_disc:
+                    album_dir /= "CD 2"
+                self.assertTrue((album_dir / "01. Artist - First.mp3").exists())
+                self.assertTrue((album_dir / "disc-info.json").exists())
+                self.assertTrue((album_dir / "musicbrainz.json").exists())
                 tag_calls = (root / "id3v2-calls").read_text().splitlines()
                 self.assertEqual(len(tag_calls), 2)
+                disc_position = "2/2" if multi_disc else "1/1"
                 self.assertTrue(all(
-                    f"--TXXX MusicBrainz Album Id:{RELEASE_ID}" in call
+                    f"--TXXX MusicBrainz Album Id:{RELEASE_ID} --TPOS {disc_position} {album_dir}/"
+                    in call
                     for call in tag_calls
-                ))
+                ), tag_calls)
             if not ripped:
                 self.assertIn("De cd blijft in het station.", result.stdout + result.stderr)
 

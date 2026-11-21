@@ -95,6 +95,7 @@ Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
         ├── disc-info.json
         └── musicbrainz.json
 ```
+Bij een album met meerdere cd's krijgt elke cd een eigen submap. 
 
 ## Metadata
 

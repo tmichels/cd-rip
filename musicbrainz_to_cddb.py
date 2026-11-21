@@ -100,7 +100,7 @@ def build_cddb(metadata, disc_info, release_id=None, medium_number=None):
             title = f"{clean(credit_name(track['artist-credit']))} / {title}"
         lines.append(f"TTITLE{index}={title}")
     lines += ["EXTD=", *[f"EXTT{index}=" for index in range(len(tracks))], "PLAYORDER="]
-    return "\n".join(lines) + "\n", release["id"]
+    return "\n".join(lines) + "\n", release["id"], medium["position"]
 
 
 def main():
@@ -109,6 +109,7 @@ def main():
     parser.add_argument("disc_info_file")
     parser.add_argument("output_dir")
     parser.add_argument("release_id_file")
+    parser.add_argument("disc_number_file")
     parser.add_argument("--release-id")
     parser.add_argument("--medium", type=int)
     args = parser.parse_args()
@@ -117,7 +118,9 @@ def main():
     try:
         metadata = json.loads(Path(args.metadata_file).read_text(encoding="utf-8"))
         disc_info = json.loads(Path(args.disc_info_file).read_text(encoding="utf-8"))
-        cddb, release_id = build_cddb(metadata, disc_info, args.release_id, args.medium)
+        cddb, release_id, disc_number = build_cddb(
+            metadata, disc_info, args.release_id, args.medium
+        )
     except (OSError, ValueError, KeyError) as error:
         print(f"Omzetten naar CDDB mislukt: {error}", file=sys.stderr)
         return 1
@@ -126,6 +129,7 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     (output / disc_info["cddb_id"]).write_text(cddb, encoding="utf-8")
     Path(args.release_id_file).write_text(release_id + "\n", encoding="utf-8")
+    Path(args.disc_number_file).write_text(f"{disc_number}\n", encoding="utf-8")
     return 0
 
 

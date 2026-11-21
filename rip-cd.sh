@@ -116,7 +116,7 @@ prepare_rip_metadata() {
 
     .venv/bin/python musicbrainz_to_cddb.py \
         "$disc_metadata_dir/musicbrainz.json" "$disc_metadata_dir/disc-info.json" \
-        "$disc_metadata_dir/cddb" "$disc_metadata_dir/release-id" \
+        "$disc_metadata_dir/cddb" "$disc_metadata_dir/release-id" "$disc_metadata_dir/disc-number" \
         "${release_id_args[@]}" "${medium_args[@]}" ||
         abort_rip 'Metadata omzetten mislukt; de rip wordt afgebroken.'
     jq -e --arg release_id "$(<"$disc_metadata_dir/release-id")" \
@@ -125,6 +125,10 @@ prepare_rip_metadata() {
         abort_rip 'Gekozen release opslaan mislukt; de rip wordt afgebroken.'
     export RIP_CDDB_DIR="$PWD/$disc_metadata_dir/cddb"
     export RIP_RELEASE_FILE="$PWD/$disc_metadata_dir/release.json"
+    RIP_DISC_NUMBER=$(<"$disc_metadata_dir/disc-number")
+    RIP_DISC_COUNT=$(jq -er '.media | length' "$RIP_RELEASE_FILE") ||
+        abort_rip "Aantal cd's in de release onbekend; de rip wordt afgebroken."
+    export RIP_DISC_NUMBER RIP_DISC_COUNT
     download_release_front_cover "$disc_metadata_dir"
     printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$disc_metadata_dir"
 }
