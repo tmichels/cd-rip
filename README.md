@@ -1,15 +1,15 @@
 # cd-rip
 
 Ript audio-cd's naar losse mp3-bestanden en bewaart de cd-layout naast de
-muziek. Een cd wordt overgeslagen als dezelfde layout al in de muziekbibliotheek
+muziek. Een cd wordt overgeslagen als deze al in de muziekbibliotheek
 is geregistreerd
-1. Plaats een cd en het script wordt automatisch opgestart (zie kopje hieronder).
+1. Plaats een cd en het script wordt automatisch opgestart.
 2. Het script leest de cd-layout en gebruikt deze als een soort vingerafdruk.
-2. Het vergelijkt de vingerafdruk van de cd met alle vingerafdrukken opgeslagen in de bibliotheek.
-2. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
-3. Anders haalt `fetch_metadata.py` de metadata op bij MusicBrainz (zie "Metadata"
+3. Het vergelijkt de vingerafdruk van de cd met alle vingerafdrukken opgeslagen in de bibliotheek.
+4. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
+5. Anders haalt `fetch_metadata.py` de metadata op bij MusicBrainz (zie "Metadata"
    hieronder) en ript `abcde` de cd naar mp3's met die metadata, volgens `abcde.conf`.
-4. Na controle op fouten en voltooide tracks wordt de gebruikte MusicBrainz-release
+6. Na controle op fouten en voltooide tracks wordt de gebruikte MusicBrainz-release
    als `musicbrainz.json` en de vingerafdruk als `disc-info.json` naast de mp3's
    opgeslagen; die laatste dient voor herkenning bij een volgende keer.
 
@@ -71,33 +71,14 @@ er is een instelbaar max aantal logbestanden.
 Een poging die wordt geweigerd omdat een andere rip al bezig is, meldt dat op
 de terminal of in het systemd-journal en krijgt geen eigen logbestand.
 
-## Configuratie en bestandsindeling
+Als de rip automatisch via `cd-rip.service` is gestart, staat de uitvoer ook in
+het systemd-journal. Vraag die op met:
 
-De projectspecifieke instellingen staan met inline toelichting in `abcde.conf`.
-De actie `tag` schrijft de metadata die `abcde` heeft opgehaald met `id3v2`
-als ID3v2.3-tags in iedere mp3: artiest, tracktitel, albumtitel, jaar, genre,
-tracknummer en commentaar (indien beschikbaar). Het tracknummer bevat ook het
-totale aantal tracks. Bij verzamelalbums krijgt iedere track zijn eigen artiest
-en wordt de albumartiest `Various`.
+```bash
+journalctl -u cd-rip.service
+```
 
-Ontbrekende gegevens in de metadatabron, zoals het jaar, worden niet automatisch
-aangevuld. Deze tags staan in de mp3 zelf, niet in `disc-info.json`.
-Dit geldt voor nieuwe rips; bestaande rips worden nog steeds overgeslagen en
-krijgen hiermee niet achteraf nieuwe tags.
-
-De actie `playlist` maakt een `.m3u` in de albummap, ook bij verzamelalbums.
-De playlist bevat de tracks in cd-volgorde met relatieve paden, zodat je de
-hele albummap kunt verplaatsen.
-
-`rip-cd.sh` downloadt vooraf de albumhoes van de Cover Art Archive (van de
-gekozen MusicBrainz-release) naar `metadata/<disc_id>/cover.jpg`; `getalbumart`
-gebruikt die via `cover_from_file.sh`.
-`embedalbumart` sluit deze met `eyeD3` in iedere mp3 in. In abcde 2.9.3 wordt
-de losse afbeelding daarna bewaard in `albumart_backup/cover.jpg` in de
-albummap. Als er geen hoes wordt gevonden, kan de rip zonder hoes doorgaan;
-de uitvoer van `abcde` staat in het logbestand. Omdat het rippen niet-interactief
-is, wordt niet gevraagd om een hoes te kiezen of te bevestigen.
-Ook playlists en albumhoezen worden alleen bij nieuwe rips toegevoegd.
+## Bestandsindeling
 
 Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
 
@@ -114,38 +95,6 @@ Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
         └── musicbrainz.json
 ```
 
-Bij een verzamelalbum kiest `abcde` zijn standaardimplementatie `VAOUTPUTFORMAT`:
-`Various-${ALBUMFILE}/${TRACKNUM}.${ARTISTFILE}-${TRACKFILE}`, wordt dit:
-
-```text
-~/muziek/
-└── Various-Summer Hits/
-    ├── 01.Artist One-First Song.mp3
-    ├── 02.Artist Two-Second Song.mp3
-    ├── Summer Hits.m3u
-    ├── albumart_backup/
-    │   └── cover.jpg
-    ├── disc-info.json
-    └── musicbrainz.json
-```
-
-## Inhoud van disc-info.json
-
-De JSON bevat de gegevens uit `read_disc.py`:
-
-| Veld                        | Betekenis                                               |
-|-----------------------------|---------------------------------------------------------|
-| `disc_id`                   | MusicBrainz-disc-ID                                     |
-| `cddb_id`                   | FreeDB/CDDB-disc-ID                                     |
-| `toc`                       | Table of Contents: de cd-layout als tekst               |
-| `first_track`, `last_track` | Eerste en laatste tracknummer                           |
-| `lead_out_frame`            | Lead-outpositie in cd-frames                            |
-| `tracks`                    | Per track: `number`, `length_frames` en `offset_frames` |
-
-De JSON bevat geen artiest- of albumtitels en geen controlegetallen van de
-mp3-bestanden. De herkenning is gebaseerd op de cd-layout, niet op vergelijking
-van de audio.
-
 ## Metadata
 
 Voor een nieuwe cd haalt `fetch_metadata.py` eerst de metadata op bij de
@@ -157,11 +106,6 @@ MusicBrainz-API, los van `abcde`. De uitkomst bepaalt of er geript wordt:
 | 404 (disc onbekend)      | De rip wordt afgebroken en de cd blijft in het station            |
 | 503 (server bezet)       | Elke 5 seconden opnieuw, 1 minuut lang; daarna wordt afgebroken    |
 | 400 en alle andere fouten| De rip wordt afgebroken                                            |
-
-Als het ophalen of omzetten van de metadata mislukt, blijft de cd in het
-station. Ook een antwoord zonder releases leidt tot afbreken; er wordt niet
-zonder metadata geript. Na het uitlezen van de audio werpt `abcde` de cd nog
-steeds uit.
 
 ### Handmatig een MusicBrainz-release kiezen
 
@@ -176,10 +120,9 @@ vanuit de projectmap, bijvoorbeeld:
 
 Het script haalt deze release op en geeft de metadata via het lokale
 CDDB-bestand door aan `abcde`, inclusief de bestaande tag-, bestandsnaam- en
-albumhoesverwerking. De disc-ID hoeft bij een handmatig gekozen release niet
-in MusicBrainz geregistreerd te zijn.
+albumhoesverwerking.
 
-Bij meerdere discs kiest het script eerst op disc-ID, anders op een uniek
+Bij meerdere cds kiest het script eerst op disc-ID, anders op een uniek
 overeenkomend aantal tracks. Is dat niet eenduidig, geef dan ook het discnummer
 binnen de release op:
 
@@ -188,31 +131,4 @@ binnen de release op:
 ```
 
 Het aantal tracks moet altijd overeenkomen; anders stopt de rip en blijft de cd
-in het station. Controleer zelf dat je de juiste uitgave en trackvolgorde kiest:
-een gelijk aantal tracks garandeert niet dat de release klopt.
-Reeds geregistreerde rips blijven overgeslagen worden, ook met een release-ID.
-Verplaats een eerdere onbekende rip dus eerst buiten de bibliotheek als je
-dezelfde cd opnieuw met metadata wilt rippen.
-
-De metadata staat in `metadata/<disc_id>/` in de projectmap:
-`musicbrainz.json` (het antwoord), `disc-info.json` (de cd-layout) en
-`cddb/<cddb_id>`. Dat laatste bestand maakt `musicbrainz_to_cddb.py` van de
-JSON; `abcde` leest het via `CDDBLOCALDIR`, zodat de rip precies deze metadata
-gebruikt. Als MusicBrainz meerdere releases voor de disc kent, wordt de eerste
-gebruikt. Het genre wordt niet ingevuld. Ontbreekt bij automatisch zoeken de disc_id in het antwoord of
-klopt het aantal tracks niet met de cd, dan wordt afgebroken.
-
-Ook `release-id` (de gekozen release), `release.json` (het MusicBrainz-antwoord
-voor alleen de gekozen release) en `cover.jpg` staan in die map. Na een geslaagde
-rip wordt `release.json` als `musicbrainz.json` naast de mp3's opgeslagen, zodat
-de gebruikte metadata bij de muziek bewaard blijft. Heeft de
-release geen hoes, dan gaat de rip zonder hoes door.
-
-## Aandachtspunten
-
-- Een bestaande rip zonder `disc-info.json` wordt niet herkend.
-- Bij een gevonden JSON controleert het script niet opnieuw of alle mp3's
-  nog aanwezig en intact zijn. Bewaar of verwijder de JSON samen met de rip. 
-  - TODO: controleer of alle bestanden bestaan en gezond zijn
-- Een mislukte of onvolledige rip krijgt geen nieuwe JSON als de controles
-  in de hook dat detecteren. 
+in het station. 
