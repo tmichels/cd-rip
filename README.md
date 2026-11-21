@@ -18,6 +18,7 @@ Het project gebruikt:
 
 - Linux
 - Bash
+- `flock` (pakket `util-linux`, voor het voorkomen van gelijktijdige rips)
 - Python 3
 - `libdiscid`
 - `abcde`
@@ -33,7 +34,7 @@ Het project gebruikt:
 Op Debian/Ubuntu kun je de benodigdheden als volgt installeren:
 
 ```bash
-sudo apt install python3-venv libdiscid0 abcde lame id3v2 jq glyrc eyed3 imagemagick
+sudo apt install python3-venv libdiscid0 abcde lame id3v2 jq glyrc eyed3 imagemagick util-linux
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 mkdir -p "$HOME/muziek"
@@ -66,6 +67,8 @@ journalctl -u cd-rip.service
 Het script toont alle uitvoer en foutmeldingen op de terminal en schrijft ze
 ook automatisch naar `log/YYYYMMDD_HH:MM:SS.log` in de projectmap. Oude logs worden automatisch opgeruimd, 
 er is een instelbaar max aantal logbestanden.
+Een poging die wordt geweigerd omdat een andere rip al bezig is, meldt dat op
+de terminal of in het systemd-journal en krijgt geen eigen logbestand.
 
 ## Configuratie en bestandsindeling
 
@@ -148,35 +151,24 @@ MusicBrainz-API, los van `abcde`. De uitkomst bepaalt of er geript wordt:
 | Antwoord van MusicBrainz | Gevolg                                                             |
 |--------------------------|--------------------------------------------------------------------|
 | 200                      | Metadata wordt opgeslagen en gebruikt voor de rip                  |
-| 404 (disc onbekend)      | De rip wordt afgebroken en de cd wordt uitgeworpen                |
+| 404 (disc onbekend)      | De rip wordt afgebroken en de cd blijft in het station            |
 | 503 (server bezet)       | Elke 5 seconden opnieuw, 1 minuut lang; daarna wordt afgebroken    |
 | 400 en alle andere fouten| De rip wordt afgebroken                                            |
 
-Bij een afgebroken rip wordt de cd uitgeworpen.
-Ook een antwoord zonder releases leidt tot afbreken; er wordt niet zonder
-metadata geript.
+Als het ophalen of omzetten van de metadata mislukt, blijft de cd in het
+station. Ook een antwoord zonder releases leidt tot afbreken; er wordt niet
+zonder metadata geript. Na het uitlezen van de audio werpt `abcde` de cd nog
+steeds uit.
 
 ### Handmatig een MusicBrainz-release kiezen
 
-Als de cd niet wordt herkend, zoek je zelf de juiste **release-ID** op
-MusicBrainz (de UUID in `/release/...`, niet een release-group-ID).
-Blokkeer eerst de automatische service, zodat die de cd niet opnieuw verwerkt
-of uitwerpt:
-
-```bash
-sudo systemctl mask --runtime --now cd-rip.service
-```
-
-Plaats de cd terug en start vanuit de projectmap:
+Als de cd niet wordt herkend, blijft hij in het station. Zoek zelf de juiste
+**release-ID** op MusicBrainz (de UUID in `/release/...`, niet een
+release-group-ID). Wacht tot de automatische poging is afgelopen en start
+vanuit de projectmap, bijvoorbeeld:
 
 ```bash
 ./rip-cd.sh e925ed61-5bbf-41d8-a352-e31f2ef53f8e
-```
-
-Hef na afloop de blokkade op:
-
-```bash
-sudo systemctl unmask --runtime cd-rip.service
 ```
 
 Het script haalt deze release op en geeft de metadata via het lokale
@@ -192,8 +184,8 @@ binnen de release op:
 ./rip-cd.sh e925ed61-5bbf-41d8-a352-e31f2ef53f8e 2
 ```
 
-Het aantal tracks moet altijd overeenkomen; anders stopt de rip en wordt de cd
-uitgeworpen. Controleer zelf dat je de juiste uitgave en trackvolgorde kiest:
+Het aantal tracks moet altijd overeenkomen; anders stopt de rip en blijft de cd
+in het station. Controleer zelf dat je de juiste uitgave en trackvolgorde kiest:
 een gelijk aantal tracks garandeert niet dat de release klopt.
 Reeds geregistreerde rips blijven overgeslagen worden, ook met een release-ID.
 Verplaats een eerdere onbekende rip dus eerst buiten de bibliotheek als je

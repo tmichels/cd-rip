@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import urllib.error
 from unittest.mock import patch
@@ -183,7 +184,9 @@ class MetadataTests(unittest.TestCase):
         self.assertIn("invalid UUID value", stderr.getvalue())
         fetch.assert_not_called()
 
-    def run_shell_scenario(self, repository, scenario, arguments, status, ripped):
+    @contextlib.contextmanager
+    def shell_project(self, scenario):
+        repository = Path(__file__).resolve().parent
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / ".venv/bin").mkdir(parents=True)
@@ -207,12 +210,19 @@ class MetadataTests(unittest.TestCase):
 import pathlib
 import subprocess
 import sys
+import time
 command = sys.argv[1]
 if command == "read_disc.py":
     print(pathlib.Path("disc.json").read_text())
 elif command == "fetch_metadata.py":
-    if {scenario!r} == "unknown":
+    if pathlib.Path("hold_fetch").exists() and "--release-id" not in sys.argv:
+        pathlib.Path("fetch_started").touch()
+        while not pathlib.Path("release_fetch").exists():
+            time.sleep(0.01)
+    if {scenario!r} == "unknown" and "--release-id" not in sys.argv:
         sys.exit(1)
+    if {scenario!r} == "empty":
+        sys.exit(0)
     if "--release-id" in sys.argv:
         assert sys.argv[sys.argv.index("--release-id") + 1] == {RELEASE_ID!r}
     print(pathlib.Path("release.json").read_text())
@@ -223,9 +233,13 @@ else:
 """,
                 "bin/abcde": """#!/usr/bin/env bash
 set -eu
+source ./abcde.conf
 test -s "$RIP_CDDB_DIR/12345678"
 test -n "$TOC_OUTPUT"
 touch ripped
+if [[ "$EJECTCD" == y ]]; then
+    eject "$CDROM"
+fi
 """,
                 "bin/eject": "#!/usr/bin/env bash\ntouch ejected\n",
                 "bin/curl": "#!/usr/bin/env bash\nexit 22\n",
@@ -240,18 +254,24 @@ touch ripped
                 "HOME": str(root),
                 "PATH": f"{root / 'bin'}:{os.environ['PATH']}",
             }
+            yield root, environment
+
+    def run_shell_scenario(self, scenario, arguments, status, ripped):
+        with self.shell_project(scenario) as (root, environment):
             result = subprocess.run(
                 ["bash", "rip-cd.sh", *arguments], cwd=root,
-                env=environment, capture_output=True, text=True,
+                env=environment, capture_output=True, text=True, timeout=10,
             )
             self.assertEqual(result.returncode, status, result.stdout + result.stderr)
             self.assertEqual((root / "ripped").exists(), ripped, result.stdout)
-            self.assertEqual((root / "ejected").exists(), not ripped, result.stdout)
+            self.assertEqual((root / "ejected").exists(), ripped, result.stdout)
+            if not ripped:
+                self.assertIn("De cd blijft in het station.", result.stdout + result.stderr)
 
     def test_shell_pipeline(self):
-        repository = Path(__file__).resolve().parent
         scenarios = [
             ("unknown", [], 1, False),
+            ("empty", [], 1, False),
             ("automatic", [], 0, True),
             ("manual", [RELEASE_ID], 0, True),
             ("mismatch", [RELEASE_ID, "1"], 1, False),
@@ -260,7 +280,81 @@ touch ripped
         ]
         for scenario, arguments, status, ripped in scenarios:
             with self.subTest(scenario=scenario):
-                self.run_shell_scenario(repository, scenario, arguments, status, ripped)
+                self.run_shell_scenario(scenario, arguments, status, ripped)
+
+    def test_manual_rip_after_automatic_metadata_failure(self):
+        with self.shell_project("unknown") as (root, environment):
+            automatic = subprocess.run(
+                ["bash", "rip-cd.sh"], cwd=root, env=environment,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(automatic.returncode, 1, automatic.stdout + automatic.stderr)
+            self.assertFalse((root / "ripped").exists())
+            self.assertFalse((root / "ejected").exists())
+
+            manual = subprocess.run(
+                ["bash", "rip-cd.sh", RELEASE_ID], cwd=root, env=environment,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(manual.returncode, 0, manual.stdout + manual.stderr)
+            self.assertTrue((root / "ripped").exists())
+            self.assertTrue((root / "ejected").exists())
+
+    def test_concurrent_rips_are_rejected_until_the_first_finishes(self):
+        with self.shell_project("unknown") as (root, environment):
+            (root / "hold_fetch").touch()
+            automatic = subprocess.Popen(
+                ["bash", "rip-cd.sh"], cwd=root, env=environment,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            try:
+                deadline = time.monotonic() + 10
+                while not (root / "fetch_started").exists():
+                    if automatic.poll() is not None or time.monotonic() >= deadline:
+                        self.fail("De automatische rip begon niet met metadata ophalen.")
+                    time.sleep(0.01)
+
+                manual = subprocess.run(
+                    ["bash", "rip-cd.sh", RELEASE_ID], cwd=root, env=environment,
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(manual.returncode, 1, manual.stdout + manual.stderr)
+                self.assertIn("Er is al een rip actief", manual.stderr)
+                self.assertFalse((root / "ripped").exists())
+                self.assertFalse((root / "ejected").exists())
+            finally:
+                (root / "release_fetch").touch()
+                try:
+                    stdout, stderr = automatic.communicate(timeout=10)
+                except subprocess.TimeoutExpired:
+                    automatic.kill()
+                    stdout, stderr = automatic.communicate(timeout=5)
+                    self.fail(f"De automatische rip stopte niet:\n{stdout}{stderr}")
+
+            self.assertEqual(automatic.returncode, 1, stdout + stderr)
+            self.assertFalse((root / "ejected").exists())
+            manual = subprocess.run(
+                ["bash", "rip-cd.sh", RELEASE_ID], cwd=root, env=environment,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(manual.returncode, 0, manual.stdout + manual.stderr)
+            self.assertTrue((root / "ripped").exists())
+            self.assertTrue((root / "ejected").exists())
+
+    def test_shell_reports_lock_failure(self):
+        with self.shell_project("automatic") as (root, environment):
+            flock = root / "bin/flock"
+            flock.write_text("#!/usr/bin/env bash\nprintf 'Lockfout\\n' >&2\nexit 74\n")
+            flock.chmod(0o755)
+            result = subprocess.run(
+                ["bash", "rip-cd.sh"], cwd=root, env=environment,
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 74)
+            self.assertIn("Lockfout", result.stderr)
+            self.assertIn("Vergrendeling van de cd-rip mislukt (status 74).", result.stderr)
+            self.assertFalse((root / "ripped").exists())
+            self.assertFalse((root / "ejected").exists())
 
     def test_shell_rejects_invalid_arguments_before_reading_disc(self):
         script = Path(__file__).resolve().parent / "rip-cd.sh"

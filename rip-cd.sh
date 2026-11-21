@@ -9,6 +9,7 @@ main() {
         return 1
     fi
     local musicbrainz_release_id="${1:-}"
+    lock_cd_rip
     start_logging
     date '+%d-%m-%Y %H:%M:%S'
     source ./abcde.conf
@@ -48,8 +49,20 @@ print_usage() {
     printf 'Gebruik: %s [MusicBrainz-release-ID [discnummer]]\n' "$0" >&2
 }
 
-start_logging() {
+lock_cd_rip() {
     mkdir -p log
+    exec 9>log/cd-rip.lock
+    local lock_status=0
+    flock -n 9 || lock_status=$?
+    if [[ $lock_status -eq 1 ]]; then
+        printf '%s\n' 'Er is al een rip actief; probeer het opnieuw zodra deze klaar is.' >&2
+    elif [[ $lock_status -ne 0 ]]; then
+        printf 'Vergrendeling van de cd-rip mislukt (status %s).\n' "$lock_status" >&2
+    fi
+    return "$lock_status"
+}
+
+start_logging() {
     find log -maxdepth 1 -type f -name '*.log' -print0 |
         LC_ALL=C sort -zr | tail -z -n +"$MAX_LOG_FILES" | xargs -0 -r rm --
     exec > >(tee -a "log/$(date '+%Y%m%d_%H:%M:%S').log") 2>&1
@@ -95,25 +108,24 @@ prepare_rip_metadata() {
     rm -rf "$disc_metadata_dir/cddb"
     printf '%s\n' "$disc_info_json" > "$disc_metadata_dir/disc-info.json"
     .venv/bin/python fetch_metadata.py "$disc_id" "${release_id_args[@]}" > "$disc_metadata_dir/musicbrainz.json" ||
-        abort_and_eject 'Metadata ophalen mislukt; de rip wordt afgebroken.'
+        abort_rip 'Metadata ophalen mislukt; de rip wordt afgebroken.'
 
     if [[ ! -s "$disc_metadata_dir/musicbrainz.json" ]]; then
-        abort_and_eject 'Geen metadata beschikbaar; de rip wordt afgebroken.'
+        abort_rip 'Geen metadata beschikbaar; de rip wordt afgebroken.'
     fi
 
     .venv/bin/python musicbrainz_to_cddb.py \
         "$disc_metadata_dir/musicbrainz.json" "$disc_metadata_dir/disc-info.json" \
         "$disc_metadata_dir/cddb" "$disc_metadata_dir/release-id" \
         "${release_id_args[@]}" "${medium_args[@]}" ||
-        abort_and_eject 'Metadata omzetten mislukt; de rip wordt afgebroken.'
+        abort_rip 'Metadata omzetten mislukt; de rip wordt afgebroken.'
     export RIP_CDDB_DIR="$PWD/$disc_metadata_dir/cddb"
     download_release_front_cover "$disc_metadata_dir"
     printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$disc_metadata_dir"
 }
 
-abort_and_eject() {
-    printf '%s\n' "$1" >&2
-    eject "$CDROM" || true
+abort_rip() {
+    printf '%s\n' "$1" 'De cd blijft in het station.' >&2
     exit 1
 }
 
