@@ -11,7 +11,8 @@ is geregistreerd
    hieronder) en ript `abcde` de cd naar mp3's met die metadata, volgens `abcde.conf`.
 6. Na controle op fouten en voltooide tracks wordt de gebruikte MusicBrainz-release
    als `musicbrainz.json` en de vingerafdruk als `disc-info.json` naast de mp3's
-   opgeslagen; die laatste dient voor herkenning bij een volgende keer.
+   opgeslagen; de release-ID staat ook in elke mp3 als de ID3-tag
+   `MusicBrainz Album Id`. De vingerafdruk dient voor herkenning bij een volgende keer.
 
 ## Installatie
 

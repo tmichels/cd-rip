@@ -238,12 +238,24 @@ test -s "$RIP_CDDB_DIR/12345678"
 jq -e --arg id e925ed61-5bbf-41d8-a352-e31f2ef53f8e '.id == $id' "$RIP_RELEASE_FILE" >/dev/null
 test -n "$TOC_OUTPUT"
 touch ripped
+album_dir="$HOME/muziek/Artist/Album"
+mkdir -p "$album_dir" "$HOME/abcde-temp"
+touch "$album_dir/01. Artist - First.mp3" "$album_dir/02. Artist - Second.mp3"
+DALBUM=Album
+TRACKARTIST=Artist
+VARIOUSARTISTS=n
+ABCDETEMPDIR="$HOME/abcde-temp"
+mungealbumname() { printf '%s\\n' "$1"; }
+mungeartistname() { printf '%s\\n' "$1"; }
+checkstatus() { return 0; }
+post_encode
 if [[ "$EJECTCD" == y ]]; then
     eject "$CDROM"
 fi
 """,
                 "bin/eject": "#!/usr/bin/env bash\ntouch ejected\n",
                 "bin/curl": "#!/usr/bin/env bash\nexit 22\n",
+                "bin/id3v2": "#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"$HOME/id3v2-calls\"\n",
             }
             for name, content in commands.items():
                 path = root / name
@@ -266,6 +278,13 @@ fi
             self.assertEqual(result.returncode, status, result.stdout + result.stderr)
             self.assertEqual((root / "ripped").exists(), ripped, result.stdout)
             self.assertEqual((root / "ejected").exists(), ripped, result.stdout)
+            if ripped:
+                tag_calls = (root / "id3v2-calls").read_text().splitlines()
+                self.assertEqual(len(tag_calls), 2)
+                self.assertTrue(all(
+                    f"--TXXX MusicBrainz Album Id:{RELEASE_ID}" in call
+                    for call in tag_calls
+                ))
             if not ripped:
                 self.assertIn("De cd blijft in het station.", result.stdout + result.stderr)
 
