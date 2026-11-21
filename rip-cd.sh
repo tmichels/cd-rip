@@ -119,7 +119,12 @@ prepare_rip_metadata() {
         "$disc_metadata_dir/cddb" "$disc_metadata_dir/release-id" \
         "${release_id_args[@]}" "${medium_args[@]}" ||
         abort_rip 'Metadata omzetten mislukt; de rip wordt afgebroken.'
+    jq -e --arg release_id "$(<"$disc_metadata_dir/release-id")" \
+        'first(.releases[] | select(.id == $release_id))' \
+        "$disc_metadata_dir/musicbrainz.json" > "$disc_metadata_dir/release.json" ||
+        abort_rip 'Gekozen release opslaan mislukt; de rip wordt afgebroken.'
     export RIP_CDDB_DIR="$PWD/$disc_metadata_dir/cddb"
+    export RIP_RELEASE_FILE="$PWD/$disc_metadata_dir/release.json"
     download_release_front_cover "$disc_metadata_dir"
     printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$disc_metadata_dir"
 }

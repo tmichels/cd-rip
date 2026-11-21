@@ -235,6 +235,7 @@ else:
 set -eu
 source ./abcde.conf
 test -s "$RIP_CDDB_DIR/12345678"
+jq -e --arg id e925ed61-5bbf-41d8-a352-e31f2ef53f8e '.id == $id' "$RIP_RELEASE_FILE" >/dev/null
 test -n "$TOC_OUTPUT"
 touch ripped
 if [[ "$EJECTCD" == y ]]; then

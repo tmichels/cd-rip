@@ -9,8 +9,9 @@ is geregistreerd
 2. Is de cd al geregistreerd, dan wordt het rippen overgeslagen.
 3. Anders haalt `fetch_metadata.py` de metadata op bij MusicBrainz (zie "Metadata"
    hieronder) en ript `abcde` de cd naar mp3's met die metadata, volgens `abcde.conf`.
-4. Na controle op fouten en voltooide tracks wordt de vingerafdruk als
-   `disc-info.json` naast de mp3's opgeslagen voor herkenning bij een volgende keer.
+4. Na controle op fouten en voltooide tracks wordt de gebruikte MusicBrainz-release
+   als `musicbrainz.json` en de vingerafdruk als `disc-info.json` naast de mp3's
+   opgeslagen; die laatste dient voor herkenning bij een volgende keer.
 
 ## Installatie
 
@@ -109,7 +110,8 @@ Voor een gewoon album ziet de indeling er bijvoorbeeld zo uit:
         ├── Album.m3u
         ├── albumart_backup/
         │   └── cover.jpg
-        └── disc-info.json
+        ├── disc-info.json
+        └── musicbrainz.json
 ```
 
 Bij een verzamelalbum kiest `abcde` zijn standaardimplementatie `VAOUTPUTFORMAT`:
@@ -123,7 +125,8 @@ Bij een verzamelalbum kiest `abcde` zijn standaardimplementatie `VAOUTPUTFORMAT`
     ├── Summer Hits.m3u
     ├── albumart_backup/
     │   └── cover.jpg
-    └── disc-info.json
+    ├── disc-info.json
+    └── musicbrainz.json
 ```
 
 ## Inhoud van disc-info.json
@@ -199,7 +202,10 @@ gebruikt. Als MusicBrainz meerdere releases voor de disc kent, wordt de eerste
 gebruikt. Het genre wordt niet ingevuld. Ontbreekt bij automatisch zoeken de disc_id in het antwoord of
 klopt het aantal tracks niet met de cd, dan wordt afgebroken.
 
-Ook `release-id` (de gekozen release) en `cover.jpg` staan in die map. Heeft de
+Ook `release-id` (de gekozen release), `release.json` (het MusicBrainz-antwoord
+voor alleen de gekozen release) en `cover.jpg` staan in die map. Na een geslaagde
+rip wordt `release.json` als `musicbrainz.json` naast de mp3's opgeslagen, zodat
+de gebruikte metadata bij de muziek bewaard blijft. Heeft de
 release geen hoes, dan gaat de rip zonder hoes door.
 
 ## Aandachtspunten
