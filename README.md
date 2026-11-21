@@ -148,18 +148,63 @@ MusicBrainz-API, los van `abcde`. De uitkomst bepaalt of er geript wordt:
 | Antwoord van MusicBrainz | Gevolg                                                             |
 |--------------------------|--------------------------------------------------------------------|
 | 200                      | Metadata wordt opgeslagen en gebruikt voor de rip                  |
-| 404 (disc onbekend)      | De rip gaat door zonder metadata; `abcde` zoekt niet opnieuw       |
+| 404 (disc onbekend)      | De rip wordt afgebroken en de cd wordt uitgeworpen                |
 | 503 (server bezet)       | Elke 5 seconden opnieuw, 1 minuut lang; daarna wordt afgebroken    |
 | 400 en alle andere fouten| De rip wordt afgebroken                                            |
 
 Bij een afgebroken rip wordt de cd uitgeworpen.
+Ook een antwoord zonder releases leidt tot afbreken; er wordt niet zonder
+metadata geript.
+
+### Handmatig een MusicBrainz-release kiezen
+
+Als de cd niet wordt herkend, zoek je zelf de juiste **release-ID** op
+MusicBrainz (de UUID in `/release/...`, niet een release-group-ID).
+Blokkeer eerst de automatische service, zodat die de cd niet opnieuw verwerkt
+of uitwerpt:
+
+```bash
+sudo systemctl mask --runtime --now cd-rip.service
+```
+
+Plaats de cd terug en start vanuit de projectmap:
+
+```bash
+./rip-cd.sh e925ed61-5bbf-41d8-a352-e31f2ef53f8e
+```
+
+Hef na afloop de blokkade op:
+
+```bash
+sudo systemctl unmask --runtime cd-rip.service
+```
+
+Het script haalt deze release op en geeft de metadata via het lokale
+CDDB-bestand door aan `abcde`, inclusief de bestaande tag-, bestandsnaam- en
+albumhoesverwerking. De disc-ID hoeft bij een handmatig gekozen release niet
+in MusicBrainz geregistreerd te zijn.
+
+Bij meerdere discs kiest het script eerst op disc-ID, anders op een uniek
+overeenkomend aantal tracks. Is dat niet eenduidig, geef dan ook het discnummer
+binnen de release op:
+
+```bash
+./rip-cd.sh e925ed61-5bbf-41d8-a352-e31f2ef53f8e 2
+```
+
+Het aantal tracks moet altijd overeenkomen; anders stopt de rip en wordt de cd
+uitgeworpen. Controleer zelf dat je de juiste uitgave en trackvolgorde kiest:
+een gelijk aantal tracks garandeert niet dat de release klopt.
+Reeds geregistreerde rips blijven overgeslagen worden, ook met een release-ID.
+Verplaats een eerdere onbekende rip dus eerst buiten de bibliotheek als je
+dezelfde cd opnieuw met metadata wilt rippen.
 
 De metadata staat in `metadata/<disc_id>/` in de projectmap:
 `musicbrainz.json` (het antwoord), `disc-info.json` (de cd-layout) en
 `cddb/<cddb_id>`. Dat laatste bestand maakt `musicbrainz_to_cddb.py` van de
 JSON; `abcde` leest het via `CDDBLOCALDIR`, zodat de rip precies deze metadata
 gebruikt. Als MusicBrainz meerdere releases voor de disc kent, wordt de eerste
-gebruikt. Het genre wordt niet ingevuld. Ontbreekt de disc_id in het antwoord of
+gebruikt. Het genre wordt niet ingevuld. Ontbreekt bij automatisch zoeken de disc_id in het antwoord of
 klopt het aantal tracks niet met de cd, dan wordt afgebroken.
 
 Ook `release-id` (de gekozen release) en `cover.jpg` staan in die map. Heeft de

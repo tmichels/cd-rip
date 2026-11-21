@@ -3,6 +3,51 @@ set -euo pipefail
 
 # Alle uitvoer en foutmeldingen verschijnen nu op de terminal én in het logbestand. Oude logfiles worden verwijderd
 MAX_LOG_FILES=20
+
+main() {
+    if ! validate_arguments "$@"; then
+        return 1
+    fi
+    local musicbrainz_release_id="${1:-}"
+    start_logging
+    date '+%d-%m-%Y %H:%M:%S'
+    source ./abcde.conf
+    read_disc_info_json
+
+    local matching_disc_info_files
+    matching_disc_info_files=$(find_matching_disc_info_files "$disc_id" "$disc_toc")
+    if [[ -n "$matching_disc_info_files" ]]; then
+        show_existing_disc_metadata "$matching_disc_info_files"
+    else
+        printf '%s\n' 'Geen bestaande rip van deze cd in de library gevonden. De metadata wordt opgehaald.'
+        prepare_rip_metadata "$disc_id" "$disc_info_json" "${musicbrainz_release_id,,}" "${2:-}"
+        rip_disc "$disc_info_json"
+    fi
+
+    date '+%d-%m-%Y %H:%M:%S'
+}
+
+validate_arguments() {
+    if [[ $# -gt 2 ]]; then
+        print_usage
+        return 1
+    fi
+    if [[ $# -ge 1 ]] &&
+        [[ ! "$1" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]]; then
+        print_usage
+        return 1
+    fi
+    if [[ $# -eq 2 ]] && [[ ! "$2" =~ ^[1-9][0-9]*$ ]]; then
+        print_usage
+        return 1
+    fi
+    return 0
+}
+
+print_usage() {
+    printf 'Gebruik: %s [MusicBrainz-release-ID [discnummer]]\n' "$0" >&2
+}
+
 start_logging() {
     mkdir -p log
     find log -maxdepth 1 -type f -name '*.log' -print0 |
@@ -10,14 +55,14 @@ start_logging() {
     exec > >(tee -a "log/$(date '+%Y%m%d_%H:%M:%S').log") 2>&1
 }
 
-read_disc_info() {
-    toc_output=$(.venv/bin/python read_disc.py)
-    disc_id=$(jq -r '.disc_id' <<< "$toc_output")
-    disc_toc=$(jq -r '.toc' <<< "$toc_output")
+read_disc_info_json() {
+    disc_info_json=$(.venv/bin/python read_disc.py)
+    disc_id=$(jq -r '.disc_id' <<< "$disc_info_json")
+    disc_toc=$(jq -r '.toc' <<< "$disc_info_json")
     printf 'Disc ID:\t%s\nDisc TOC:\t%s\n\n' "$disc_id" "$disc_toc"
 }
 
-find_matching_discs() {
+find_matching_disc_info_files() {
     find "$OUTPUTDIR" -type f -name 'disc-info.json' \
         -exec jq -c --arg disc_id "$1" --arg toc "$2" '
             select(.disc_id == $disc_id and .toc == $toc)
@@ -25,10 +70,45 @@ find_matching_discs() {
         ' {} +
 }
 
-handle_existing_disc() {
+show_existing_disc_metadata() {
     printf 'Deze CD heeft dezelfde disc_id en disc_toc als deze cd uit de bibliotheek: %s. De cd wordt niet geript.\n' "$1"
     printf '\nDe metadata volgens abcde:\n'
     METADATA_ONLY=y abcde -c ./abcde.conf -a cddb,clean
+}
+
+prepare_rip_metadata() {
+    local disc_id=$1
+    local disc_info_json=$2
+    local musicbrainz_release_id="${3:-}"
+    local medium_number="${4:-}"
+    local disc_metadata_dir="metadata/$disc_id"
+    local release_id_args=()
+    local medium_args=()
+    if [[ -n "$musicbrainz_release_id" ]]; then
+        release_id_args=(--release-id "$musicbrainz_release_id")
+    fi
+    if [[ -n "$medium_number" ]]; then
+        medium_args=(--medium "$medium_number")
+    fi
+
+    mkdir -p "$disc_metadata_dir"
+    rm -rf "$disc_metadata_dir/cddb"
+    printf '%s\n' "$disc_info_json" > "$disc_metadata_dir/disc-info.json"
+    .venv/bin/python fetch_metadata.py "$disc_id" "${release_id_args[@]}" > "$disc_metadata_dir/musicbrainz.json" ||
+        abort_and_eject 'Metadata ophalen mislukt; de rip wordt afgebroken.'
+
+    if [[ ! -s "$disc_metadata_dir/musicbrainz.json" ]]; then
+        abort_and_eject 'Geen metadata beschikbaar; de rip wordt afgebroken.'
+    fi
+
+    .venv/bin/python musicbrainz_to_cddb.py \
+        "$disc_metadata_dir/musicbrainz.json" "$disc_metadata_dir/disc-info.json" \
+        "$disc_metadata_dir/cddb" "$disc_metadata_dir/release-id" \
+        "${release_id_args[@]}" "${medium_args[@]}" ||
+        abort_and_eject 'Metadata omzetten mislukt; de rip wordt afgebroken.'
+    export RIP_CDDB_DIR="$PWD/$disc_metadata_dir/cddb"
+    download_release_front_cover "$disc_metadata_dir"
+    printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$disc_metadata_dir"
 }
 
 abort_and_eject() {
@@ -37,68 +117,23 @@ abort_and_eject() {
     exit 1
 }
 
-download_cover() {
-    local metadata_dir=$1
+download_release_front_cover() {
+    local disc_metadata_dir=$1
 
-    rm -f "$metadata_dir/cover.jpg"
+    rm -f "$disc_metadata_dir/cover.jpg"
     if ! curl -sSfL -A 'cd-rip/1.0 (https://github.com/tmichels/cd-rip)' \
-        -o "$metadata_dir/cover.jpg" \
-        "https://coverartarchive.org/release/$(<"$metadata_dir/release-id")/front"; then
-        rm -f "$metadata_dir/cover.jpg"
+        -o "$disc_metadata_dir/cover.jpg" \
+        "https://coverartarchive.org/release/$(<"$disc_metadata_dir/release-id")/front"; then
+        rm -f "$disc_metadata_dir/cover.jpg"
         printf '%s\n' 'Geen albumhoes gevonden bij de Cover Art Archive.'
         return
     fi
 
-    export RIP_COVER_FILE="$PWD/$metadata_dir/cover.jpg"
-}
-
-prepare_metadata() {
-    local disc_id=$1
-    local toc_output=$2
-    local metadata_dir="metadata/$disc_id"
-
-    mkdir -p "$metadata_dir"
-    rm -rf "$metadata_dir/cddb"
-    printf '%s\n' "$toc_output" > "$metadata_dir/disc-info.json"
-    .venv/bin/python fetch_metadata.py "$disc_id" > "$metadata_dir/musicbrainz.json" ||
-        abort_and_eject 'Metadata ophalen mislukt; de rip wordt afgebroken.'
-
-    if [[ ! -s "$metadata_dir/musicbrainz.json" ]]; then
-        export RIP_CDDB_METHOD=cdtext
-        printf '%s\n' 'Geen metadata beschikbaar. Het rippen wordt gestart zonder metadata.'
-        return
-    fi
-
-    .venv/bin/python musicbrainz_to_cddb.py \
-        "$metadata_dir/musicbrainz.json" "$metadata_dir/disc-info.json" \
-        "$metadata_dir/cddb" "$metadata_dir/release-id" ||
-        abort_and_eject 'Metadata omzetten mislukt; de rip wordt afgebroken.'
-    export RIP_CDDB_DIR="$PWD/$metadata_dir/cddb"
-    download_cover "$metadata_dir"
-    printf 'Metadata opgeslagen in %s. Het rippen wordt gestart.\n' "$metadata_dir"
+    export RIP_COVER_FILE="$PWD/$disc_metadata_dir/cover.jpg"
 }
 
 rip_disc() {
     TOC_OUTPUT="$1" abcde -c ./abcde.conf
-}
-
-main() {
-    start_logging
-    date '+%d-%m-%Y %H:%M:%S'
-    source ./abcde.conf
-    read_disc_info
-
-    local matching_discs
-    matching_discs=$(find_matching_discs "$disc_id" "$disc_toc")
-    if [[ -n "$matching_discs" ]]; then
-        handle_existing_disc "$matching_discs"
-    else
-        printf '%s\n' 'Geen bestaande rip van deze cd in de library gevonden. De metadata wordt opgehaald.'
-        prepare_metadata "$disc_id" "$toc_output"
-        rip_disc "$toc_output"
-    fi
-
-    date '+%d-%m-%Y %H:%M:%S'
 }
 
 main "$@"
