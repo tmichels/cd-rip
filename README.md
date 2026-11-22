@@ -134,3 +134,14 @@ binnen de release op:
 
 Het aantal tracks moet altijd overeenkomen; anders stopt de rip en blijft de cd
 in het station. 
+
+### Achteraf tags zetten
+Met `set_id3_tag.py` kun je achteraf een ID3v2-gebruikerstag (TXXX) instellen
+op alle MP3-bestanden in een map en de onderliggende mappen. Een bestaande tag met dezelfde
+omschrijving wordt bijgewerkt; andere gebruikerstags blijven behouden.
+Bijvoorbeeld:
+
+```bash
+.venv/bin/python set_id3_tag.py \
+  "$HOME/muziek/Bob Dylan/Rough and Rowdy Ways" key value
+```
